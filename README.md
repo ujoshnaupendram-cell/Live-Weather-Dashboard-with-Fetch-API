@@ -4,7 +4,7 @@ A weather website that fetches live data from the free Open-Meteo API.
 Search any city to see the current conditions and a 5-day forecast.
 Built with HTML, CSS and asynchronous JavaScript (fetch and async/await).
 
-**Live app:** https://sindhura2008.github.io/REPO-NAME/
+**Live app:** file:///C:/Users/ujosh/Downloads/Live%20Weather%20Dashboard%20(preview).html
 
 ## Features
 - City search using the Open-Meteo Geocoding API (no API key needed)
