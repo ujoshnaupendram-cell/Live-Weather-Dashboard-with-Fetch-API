@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Live weather dashboard: search a city to see current conditions and a 5-day forecast.">
+  <title>Live Weather Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Live Weather Dashboard</h1>
+    <p>Search any city for current conditions and a 5-day forecast.</p>
+  </header>
+
+  <main>
+    <form id="form" novalidate>
+      <label for="city">City name</label>
+      <div class="field">
+        <input id="city" name="city" type="text" placeholder="For example, Nagercoil" autocomplete="off" maxlength="60">
+        <button id="search" type="submit">Search</button>
+      </div>
+    </form>
+
+    <p id="status" role="status" aria-live="polite">Type a city name to see its weather.</p>
+
+    <section id="current" class="current" aria-label="Current weather" hidden></section>
+
+    <section id="forecast-section" aria-label="5-day forecast" hidden>
+      <h2>5-day forecast</h2>
+      <ul id="forecast" class="forecast"></ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>Weather data from <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,211 @@
+// ---------- Settings: API URLs kept in one place ----------
+const GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search";
+const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
+const STORAGE_KEY = "lastCity";
+
+// ---------- Page elements ----------
+const form = document.getElementById("form");
+const cityInput = document.getElementById("city");
+const searchButton = document.getElementById("search");
+const statusBox = document.getElementById("status");
+const currentBox = document.getElementById("current");
+const forecastSection = document.getElementById("forecast-section");
+const forecastList = document.getElementById("forecast");
+
+// ---------- Weather codes (WMO) -> label and icon type ----------
+const WEATHER_CODES = {
+  0: { label: "Clear sky", icon: "sun" },
+  1: { label: "Mostly clear", icon: "sun" },
+  2: { label: "Partly cloudy", icon: "cloud" },
+  3: { label: "Overcast", icon: "cloud" },
+  45: { label: "Fog", icon: "fog" },
+  48: { label: "Freezing fog", icon: "fog" },
+  51: { label: "Light drizzle", icon: "rain" },
+  53: { label: "Drizzle", icon: "rain" },
+  55: { label: "Heavy drizzle", icon: "rain" },
+  56: { label: "Freezing drizzle", icon: "rain" },
+  57: { label: "Heavy freezing drizzle", icon: "rain" },
+  61: { label: "Light rain", icon: "rain" },
+  63: { label: "Rain", icon: "rain" },
+  65: { label: "Heavy rain", icon: "rain" },
+  66: { label: "Freezing rain", icon: "rain" },
+  67: { label: "Heavy freezing rain", icon: "rain" },
+  71: { label: "Light snow", icon: "snow" },
+  73: { label: "Snow", icon: "snow" },
+  75: { label: "Heavy snow", icon: "snow" },
+  77: { label: "Snow grains", icon: "snow" },
+  80: { label: "Light showers", icon: "rain" },
+  81: { label: "Showers", icon: "rain" },
+  82: { label: "Heavy showers", icon: "rain" },
+  85: { label: "Snow showers", icon: "snow" },
+  86: { label: "Heavy snow showers", icon: "snow" },
+  95: { label: "Thunderstorm", icon: "storm" },
+  96: { label: "Thunderstorm with hail", icon: "storm" },
+  99: { label: "Severe thunderstorm with hail", icon: "storm" }
+};
+
+// Simple SVG icons (static strings, no user data)
+const ICONS = {
+  sun: '<circle cx="32" cy="32" r="11" fill="#f2b705"/><g stroke="#f2b705" stroke-width="4" stroke-linecap="round"><path d="M32 8v8M32 48v8M8 32h8M48 32h8M15 15l5 5M44 44l5 5M49 15l-5 5M20 44l-5 5"/></g>',
+  cloud: '<path d="M20 46a12 12 0 0 1-1-24 15 15 0 0 1 28 5 10 10 0 0 1-1 19z" fill="#8fa3b8"/>',
+  rain: '<path d="M20 36a12 12 0 0 1-1-24 15 15 0 0 1 28 5 10 10 0 0 1-1 19z" fill="#8fa3b8"/><g stroke="#2f6fb3" stroke-width="4" stroke-linecap="round"><path d="M22 44l-3 8M34 44l-3 8M46 44l-3 8"/></g>',
+  snow: '<path d="M20 36a12 12 0 0 1-1-24 15 15 0 0 1 28 5 10 10 0 0 1-1 19z" fill="#8fa3b8"/><g fill="#6aa9d8"><circle cx="22" cy="48" r="3"/><circle cx="34" cy="52" r="3"/><circle cx="46" cy="48" r="3"/></g>',
+  storm: '<path d="M20 36a12 12 0 0 1-1-24 15 15 0 0 1 28 5 10 10 0 0 1-1 19z" fill="#5d6f84"/><path d="M34 38l-8 12h7l-3 10 12-15h-8z" fill="#f2b705"/>',
+  fog: '<g stroke="#8fa3b8" stroke-width="5" stroke-linecap="round"><path d="M14 22h36M10 34h40M18 46h32"/></g>'
+};
+
+// ---------- Small helpers ----------
+function setStatus(message, isError) {
+  statusBox.textContent = message;
+  statusBox.classList.toggle("error", Boolean(isError));
+}
+
+function setLoading(isLoading) {
+  searchButton.disabled = isLoading;
+  searchButton.textContent = isLoading ? "Loading..." : "Search";
+}
+
+function describe(code) {
+  return WEATHER_CODES[code] || { label: "Unknown", icon: "cloud" };
+}
+
+function makeIcon(type, size) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 64 64");
+  svg.setAttribute("width", size);
+  svg.setAttribute("height", size);
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = ICONS[type];
+  return svg;
+}
+
+function makeElement(tag, text, className) {
+  const el = document.createElement(tag);
+  el.textContent = text; // textContent keeps user text safe
+  if (className) el.className = className;
+  return el;
+}
+
+function saveCity(name) {
+  try { localStorage.setItem(STORAGE_KEY, name); } catch (e) { /* storage unavailable */ }
+}
+
+function loadCity() {
+  try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; }
+}
+
+// ---------- Input validation ----------
+function validateCity(name) {
+  if (!name) return "Please type a city name.";
+  if (name.length < 2) return "City name is too short.";
+  if (!/^[\p{L}\s.,'’-]+$/u.test(name)) return "Use letters only. Numbers and symbols are not allowed.";
+  return "";
+}
+
+// ---------- Data layer ----------
+async function findCity(name) {
+  const url = GEOCODING_URL + "?count=1&language=en&name=" + encodeURIComponent(name);
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("The city search service is not responding. Try again soon.");
+  const data = await response.json();
+  if (!data.results || data.results.length === 0) {
+    throw new Error("City not found. Check the spelling and try again.");
+  }
+  const place = data.results[0];
+  return { name: place.name, country: place.country || "", lat: place.latitude, lon: place.longitude };
+}
+
+async function getWeather(lat, lon) {
+  const url = FORECAST_URL +
+    "?latitude=" + lat + "&longitude=" + lon +
+    "&current=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m" +
+    "&daily=weather_code,temperature_2m_max,temperature_2m_min" +
+    "&forecast_days=5&timezone=auto";
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Could not load the forecast. Try again soon.");
+  return response.json();
+}
+
+// ---------- Rendering ----------
+function renderCurrent(place, weather) {
+  const now = weather.current;
+  const info = describe(now.weather_code);
+  currentBox.replaceChildren();
+
+  const text = document.createElement("div");
+  const title = place.country ? place.name + ", " + place.country : place.name;
+  text.append(
+    makeElement("h2", title),
+    makeElement("p", Math.round(now.temperature_2m) + "\u00B0C", "big-temp"),
+    makeElement("p", info.label, "condition"),
+    makeElement("p", "Humidity " + now.relative_humidity_2m + "%  |  Wind " + now.wind_speed_10m + " km/h", "details")
+  );
+
+  currentBox.append(makeIcon(info.icon, 96), text);
+  currentBox.hidden = false;
+}
+
+function renderForecast(weather) {
+  forecastList.replaceChildren();
+  const days = weather.daily;
+
+  days.time.forEach(function (dateString, i) {
+    const info = describe(days.weather_code[i]);
+    const date = new Date(dateString + "T00:00:00");
+    const card = document.createElement("li");
+    card.append(
+      makeElement("h3", date.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })),
+      makeIcon(info.icon, 48),
+      makeElement("p", info.label, "condition"),
+      makeElement("p", Math.round(days.temperature_2m_max[i]) + "\u00B0 / " + Math.round(days.temperature_2m_min[i]) + "\u00B0", "range")
+    );
+    forecastList.append(card);
+  });
+
+  forecastSection.hidden = false;
+}
+
+// ---------- Main flow ----------
+async function showWeather(name) {
+  const problem = validateCity(name);
+  if (problem) {
+    setStatus(problem, true);
+    return;
+  }
+
+  setLoading(true);
+  setStatus("Loading weather...", false);
+
+  try {
+    const place = await findCity(name);
+    const weather = await getWeather(place.lat, place.lon);
+    renderCurrent(place, weather);
+    renderForecast(weather);
+    saveCity(place.name);
+    cityInput.value = place.name;
+    setStatus("Showing weather for " + place.name + ".", false);
+  } catch (err) {
+    currentBox.hidden = true;
+    forecastSection.hidden = true;
+    // fetch() throws a TypeError when the network is down
+    if (err instanceof TypeError) {
+      setStatus("Network problem. Check your internet connection and try again.", true);
+    } else {
+      setStatus(err.message, true);
+    }
+  } finally {
+    setLoading(false);
+  }
+}
+
+form.addEventListener("submit", function (event) {
+  event.preventDefault();
+  showWeather(cityInput.value.trim());
+});
+
+// Remember the last city between visits
+const lastCity = loadCity();
+if (lastCity) {
+  cityInput.value = lastCity;
+  showWeather(lastCity);
+}
